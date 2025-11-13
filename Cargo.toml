@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+wgpu_renderer = { package = "wgpu-renderer", path = "wgpu-renderer" }
+winit = "0.30.12"
+bevy_ecs = "0.17.2"
+pollster = "*"
