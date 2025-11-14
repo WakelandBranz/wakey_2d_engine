@@ -5,6 +5,7 @@ use wakey_2d_engine::{
 };
 use winit::keyboard::KeyCode;
 
+// Hardcoded for now. I'll need to add window size tracking.
 const WINDOW_WIDTH: u32 = 1280;
 const WINDOW_HEIGHT: u32 = 720;
 const PADDLE_WIDTH: f32 = 20.0;
@@ -12,6 +13,14 @@ const PADDLE_HEIGHT: f32 = 120.0;
 const PADDLE_SPEED: f32 = 400.0; // pixels per second
 const BALL_SIZE: f32 = 10.0;
 const BALL_SPEED: f32 = 400.0; // pixels per second
+
+// Score events
+#[derive(Debug, Clone, Copy)]
+enum ScoreEvent {
+    PlayerScored,
+    AIScored,
+    NoScore,
+}
 
 // Marker components for entity types
 #[derive(Component)]
@@ -23,7 +32,10 @@ struct AIPaddle;
 #[derive(Component)]
 struct Ball;
 
-struct Pong;
+struct Pong {
+    player_score: u32,
+    ai_score: u32,
+}
 
 impl Game for Pong {
     fn init(&mut self, engine: &mut Engine) {
@@ -84,9 +96,40 @@ impl Game for Pong {
     fn update(&mut self, engine: &mut Engine, delta_time: f32) {
         // Run Pong-specific systems
         player_paddle_system(engine, delta_time);
-        ball_physics_system(engine, delta_time);
+        let score_event = ball_physics_system(engine, delta_time);
         ball_paddle_collision_system(engine);
         ai_paddle_system(engine, delta_time);
+
+        // Update score if ball went out of bounds
+        match score_event {
+            ScoreEvent::PlayerScored => self.player_score += 1,
+            ScoreEvent::AIScored => self.ai_score += 1,
+            ScoreEvent::NoScore => {}
+        }
+
+        // Render UI
+        let fps = engine.time().fps();
+        engine.renderer_mut().queue_text(
+            &format!("FPS: {:.1}", fps),
+            (10.0, 10.0),         // position
+            10.0,                 // font size
+            [1.0, 1.0, 1.0, 1.0], // white color
+        );
+
+        // Render scores
+        engine.renderer_mut().queue_text(
+            &format!("Player: {}", self.player_score),
+            (10.0, 30.0),
+            16.0,
+            [1.0, 1.0, 1.0, 1.0],
+        );
+
+        engine.renderer_mut().queue_text(
+            &format!("AI: {}", self.ai_score),
+            (WINDOW_WIDTH as f32 - 150.0, 30.0),
+            16.0,
+            [1.0, 1.0, 1.0, 1.0],
+        );
     }
 
     fn on_event(&mut self, _engine: &mut Engine, _event: &winit::event::WindowEvent) -> bool {
@@ -133,7 +176,7 @@ fn player_paddle_system(engine: &mut Engine, delta_time: f32) {
     }
 }
 
-fn ball_physics_system(engine: &mut Engine, delta_time: f32) {
+fn ball_physics_system(engine: &mut Engine, delta_time: f32) -> ScoreEvent {
     let world = engine.world_mut();
 
     // Update ball position
@@ -152,21 +195,21 @@ fn ball_physics_system(engine: &mut Engine, delta_time: f32) {
         }
     }
 
-    // Handle wall collisions
-    let mut query = world.query::<(&mut Position, &mut Velocity, &Ball)>();
-    let bounce_updates: Vec<bool> = query
-        .iter(world)
-        .map(|(pos, _, _)| pos.y <= 0.0 || pos.y + BALL_SIZE >= WINDOW_HEIGHT as f32)
-        .collect();
-
+    // Handle wall collisions (clamp-based, not just bounce detection)
     let mut query = world.query::<(&mut Position, &mut Velocity, &Ball)>();
     let mut iter = query.iter_mut(world);
-    for should_bounce in bounce_updates {
-        if let Some((mut pos, mut vel, _)) = iter.next() {
-            if should_bounce {
-                vel.y = -vel.y;
-                pos.y = pos.y.max(0.0).min(WINDOW_HEIGHT as f32 - BALL_SIZE);
-            }
+    if let Some((mut pos, mut vel, _)) = iter.next() {
+        let window_height = WINDOW_HEIGHT as f32;
+
+        // Top wall collision
+        if pos.y <= 0.0 {
+            pos.y = 0.0;
+            vel.y = vel.y.abs(); // Bounce downward (ensure positive velocity)
+        }
+        // Bottom wall collision
+        if pos.y + BALL_SIZE >= window_height {
+            pos.y = window_height - BALL_SIZE;
+            vel.y = -vel.y.abs(); // Bounce upward (ensure negative velocity)
         }
     }
 
@@ -188,17 +231,27 @@ fn ball_physics_system(engine: &mut Engine, delta_time: f32) {
         }
     }
 
-    // Reset ball if out of bounds
+    // Reset ball if out of bounds and return scoring event
     let mut query = world.query::<(&mut Position, &mut Velocity, &Ball)>();
     let mut iter = query.iter_mut(world);
     if let Some((mut pos, mut vel, _)) = iter.next() {
-        if pos.x < 0.0 || pos.x > WINDOW_WIDTH as f32 {
+        if pos.x < 0.0 {
+            // Ball went past left side - AI scores
             pos.x = (WINDOW_WIDTH as f32 - BALL_SIZE) / 2.0;
             pos.y = (WINDOW_HEIGHT as f32 - BALL_SIZE) / 2.0;
             vel.x = BALL_SPEED;
             vel.y = BALL_SPEED;
+            return ScoreEvent::AIScored;
+        } else if pos.x > WINDOW_WIDTH as f32 {
+            // Ball went past right side - Player scores
+            pos.x = (WINDOW_WIDTH as f32 - BALL_SIZE) / 2.0;
+            pos.y = (WINDOW_HEIGHT as f32 - BALL_SIZE) / 2.0;
+            vel.x = -BALL_SPEED;
+            vel.y = -BALL_SPEED;
+            return ScoreEvent::PlayerScored;
         }
     }
+    ScoreEvent::NoScore
 }
 
 fn ball_paddle_collision_system(engine: &mut Engine) {
@@ -272,14 +325,18 @@ fn ai_paddle_system(engine: &mut Engine, delta_time: f32) {
             // 0.7 is slightly slower than the player.
             let ai_speed = PADDLE_SPEED * 0.7;
 
-            if paddle_center < ball_center - 10.0 {
-                (paddle_center + ai_speed * delta_time).min(WINDOW_HEIGHT as f32 - PADDLE_HEIGHT)
-                    - PADDLE_HEIGHT / 2.0
+            let paddle_velocity = if paddle_center < ball_center - 10.0 {
+                ai_speed
             } else if paddle_center > ball_center + 10.0 {
-                (paddle_center - ai_speed * delta_time).max(0.0) - PADDLE_HEIGHT / 2.0
+                -ai_speed
             } else {
-                pos.y
-            }
+                0.0
+            };
+
+            // Simple position-based clamping like player paddle
+            (pos.y + paddle_velocity * delta_time)
+                .max(0.0)
+                .min(WINDOW_HEIGHT as f32 - PADDLE_HEIGHT)
         })
         .collect();
 
@@ -299,7 +356,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         EngineConfig::new()
             .with_title("Pong")
             .with_size(WINDOW_WIDTH, WINDOW_HEIGHT),
-        Pong,
+        Pong {
+            player_score: 0,
+            ai_score: 0,
+        },
     )?;
     Ok(())
 }
