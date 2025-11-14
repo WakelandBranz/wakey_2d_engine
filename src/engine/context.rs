@@ -4,6 +4,7 @@ use winit::keyboard::KeyCode;
 
 use crate::core::{input::Input, time::Time};
 
+// Public facing engine
 pub struct Engine {
     pub(crate) renderer: Renderer,
     pub(crate) world: World,

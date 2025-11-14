@@ -5,9 +5,6 @@ use wakey_2d_engine::{
 };
 use winit::keyboard::KeyCode;
 
-// Hardcoded for now. I'll need to add window size tracking.
-const WINDOW_WIDTH: u32 = 1280;
-const WINDOW_HEIGHT: u32 = 720;
 const PADDLE_WIDTH: f32 = 20.0;
 const PADDLE_HEIGHT: f32 = 120.0;
 const PADDLE_SPEED: f32 = 400.0; // pixels per second
@@ -39,17 +36,18 @@ struct Pong {
 
 impl Game for Pong {
     fn init(&mut self, engine: &mut Engine) {
+        let screen_dimensions = (engine.renderer().width(), engine.renderer().height());
         let world = engine.world_mut();
 
         // Create player paddle (left side)
         world.spawn((
             PlayerPaddle,
-            Position::new(20.0, (WINDOW_HEIGHT as f32 - PADDLE_HEIGHT) / 2.0),
+            Position::new(20.0, (screen_dimensions.1 as f32 - PADDLE_HEIGHT) / 2.0),
             Size::new(PADDLE_WIDTH, PADDLE_HEIGHT),
             Renderable::white(),
             Velocity::new(0.0, 0.0),
             Bounds::from_position_and_size(
-                Position::new(20.0, (WINDOW_HEIGHT as f32 - PADDLE_HEIGHT) / 2.0),
+                Position::new(20.0, (screen_dimensions.1 as f32 - PADDLE_HEIGHT) / 2.0),
                 Size::new(PADDLE_WIDTH, PADDLE_HEIGHT),
             ),
         ));
@@ -58,16 +56,16 @@ impl Game for Pong {
         world.spawn((
             AIPaddle,
             Position::new(
-                WINDOW_WIDTH as f32 - PADDLE_WIDTH - 20.0,
-                (WINDOW_HEIGHT as f32 - PADDLE_HEIGHT) / 2.0,
+                screen_dimensions.0 as f32 - PADDLE_WIDTH - 20.0,
+                (screen_dimensions.1 as f32 - PADDLE_HEIGHT) / 2.0,
             ),
             Size::new(PADDLE_WIDTH, PADDLE_HEIGHT),
-            Renderable::white(),
+            Renderable::red(),
             Velocity::new(0.0, 0.0),
             Bounds::from_position_and_size(
                 Position::new(
-                    WINDOW_WIDTH as f32 - PADDLE_WIDTH - 20.0,
-                    (WINDOW_HEIGHT as f32 - PADDLE_HEIGHT) / 2.0,
+                    screen_dimensions.0 as f32 - PADDLE_WIDTH - 20.0,
+                    (screen_dimensions.1 as f32 - PADDLE_HEIGHT) / 2.0,
                 ),
                 Size::new(PADDLE_WIDTH, PADDLE_HEIGHT),
             ),
@@ -77,16 +75,16 @@ impl Game for Pong {
         world.spawn((
             Ball,
             Position::new(
-                (WINDOW_WIDTH as f32 - BALL_SIZE) / 2.0,
-                (WINDOW_HEIGHT as f32 - BALL_SIZE) / 2.0,
+                (screen_dimensions.0 as f32 - BALL_SIZE) / 2.0,
+                (screen_dimensions.1 as f32 - BALL_SIZE) / 2.0,
             ),
             Size::new(BALL_SIZE, BALL_SIZE),
             Renderable::white(),
             Velocity::new(BALL_SPEED, BALL_SPEED),
             Bounds::from_position_and_size(
                 Position::new(
-                    (WINDOW_WIDTH as f32 - BALL_SIZE) / 2.0,
-                    (WINDOW_HEIGHT as f32 - BALL_SIZE) / 2.0,
+                    (screen_dimensions.0 as f32 - BALL_SIZE) / 2.0,
+                    (screen_dimensions.1 as f32 - BALL_SIZE) / 2.0,
                 ),
                 Size::new(BALL_SIZE, BALL_SIZE),
             ),
@@ -109,6 +107,8 @@ impl Game for Pong {
 
         // Render UI
         let fps = engine.time().fps();
+        let screen_width = engine.renderer().width();
+
         engine.renderer_mut().queue_text(
             &format!("FPS: {:.1}", fps),
             (10.0, 10.0),         // position
@@ -126,13 +126,52 @@ impl Game for Pong {
 
         engine.renderer_mut().queue_text(
             &format!("AI: {}", self.ai_score),
-            (WINDOW_WIDTH as f32 - 150.0, 30.0),
+            (screen_width - 150.0, 30.0),
             16.0,
             [1.0, 1.0, 1.0, 1.0],
         );
     }
 
-    fn on_event(&mut self, _engine: &mut Engine, _event: &winit::event::WindowEvent) -> bool {
+    fn on_resize(&mut self, engine: &mut Engine, width: f32, height: f32) {
+        let world = engine.world_mut();
+
+        // Calculate scale factor based on height
+        // Assuming original design was for 600px height
+        let original_height = 600.0;
+        let scale_factor = height / original_height;
+
+        // Scale paddle dimensions
+        let scaled_paddle_height = PADDLE_HEIGHT * scale_factor;
+        let scaled_paddle_width = PADDLE_WIDTH * scale_factor;
+
+        // Update AI paddle position and size
+        let mut ai_query = world.query::<(&mut Position, &mut Bounds, &mut Size, &AIPaddle)>();
+        for (mut pos, mut bounds, mut size, _) in ai_query.iter_mut(world) {
+            pos.x = width - scaled_paddle_width - 20.0;
+            size.width = scaled_paddle_width;
+            size.height = scaled_paddle_height;
+
+            bounds.min_x = pos.x;
+            bounds.max_x = pos.x + scaled_paddle_width;
+            bounds.min_y = pos.y;
+            bounds.max_y = pos.y + scaled_paddle_height;
+        }
+
+        // Update player paddle size (position stays at x=20)
+        let mut player_query =
+            world.query::<(&mut Position, &mut Bounds, &mut Size, &PlayerPaddle)>();
+        for (mut pos, mut bounds, mut size, _) in player_query.iter_mut(world) {
+            size.width = scaled_paddle_width;
+            size.height = scaled_paddle_height;
+
+            bounds.min_x = pos.x;
+            bounds.max_x = pos.x + scaled_paddle_width;
+            bounds.min_y = pos.y;
+            bounds.max_y = pos.y + scaled_paddle_height;
+        }
+    }
+
+    fn on_event(&mut self, engine: &mut Engine, event: &winit::event::WindowEvent) -> bool {
         false
     }
 }
@@ -141,14 +180,14 @@ impl Game for Pong {
 
 fn player_paddle_system(engine: &mut Engine, delta_time: f32) {
     let input = engine.input().clone();
+    let screen_dimensions = (engine.renderer().width(), engine.renderer().height());
     let world = engine.world_mut();
-
-    let mut query = world.query::<(&mut Position, &mut Bounds, &PlayerPaddle)>();
+    let mut query = world.query::<(&mut Position, &mut Bounds, &Size, &PlayerPaddle)>();
 
     // Collect movement updates first
     let updates: Vec<f32> = query
         .iter(world)
-        .map(|(pos, _, _)| {
+        .map(|(pos, _, size, _)| {
             let paddle_velocity =
                 if input.is_pressed(KeyCode::ArrowUp) || input.is_pressed(KeyCode::KeyW) {
                     -PADDLE_SPEED
@@ -160,23 +199,24 @@ fn player_paddle_system(engine: &mut Engine, delta_time: f32) {
 
             (pos.y + paddle_velocity * delta_time)
                 .max(0.0)
-                .min(WINDOW_HEIGHT as f32 - PADDLE_HEIGHT)
+                .min(screen_dimensions.1 - size.height)
         })
         .collect();
 
     // Apply updates
-    let mut query = world.query::<(&mut Position, &mut Bounds, &PlayerPaddle)>();
+    let mut query = world.query::<(&mut Position, &mut Bounds, &Size, &PlayerPaddle)>();
     let mut iter = query.iter_mut(world);
     for new_y in updates {
-        if let Some((mut pos, mut bounds, _)) = iter.next() {
+        if let Some((mut pos, mut bounds, size, _)) = iter.next() {
             pos.y = new_y;
             bounds.min_y = new_y;
-            bounds.max_y = new_y + PADDLE_HEIGHT;
+            bounds.max_y = new_y + size.height;
         }
     }
 }
 
 fn ball_physics_system(engine: &mut Engine, delta_time: f32) -> ScoreEvent {
+    let screen_dimensions = (engine.renderer().width(), engine.renderer().height());
     let world = engine.world_mut();
 
     // Update ball position
@@ -196,56 +236,54 @@ fn ball_physics_system(engine: &mut Engine, delta_time: f32) -> ScoreEvent {
     }
 
     // Handle wall collisions (clamp-based, not just bounce detection)
-    let mut query = world.query::<(&mut Position, &mut Velocity, &Ball)>();
+    let mut query = world.query::<(&mut Position, &mut Velocity, &Size, &Ball)>();
     let mut iter = query.iter_mut(world);
-    if let Some((mut pos, mut vel, _)) = iter.next() {
-        let window_height = WINDOW_HEIGHT as f32;
-
+    if let Some((mut pos, mut vel, size, _)) = iter.next() {
         // Top wall collision
         if pos.y <= 0.0 {
             pos.y = 0.0;
             vel.y = vel.y.abs(); // Bounce downward (ensure positive velocity)
         }
         // Bottom wall collision
-        if pos.y + BALL_SIZE >= window_height {
-            pos.y = window_height - BALL_SIZE;
+        if pos.y + size.height >= screen_dimensions.1 {
+            pos.y = screen_dimensions.1 - size.height;
             vel.y = -vel.y.abs(); // Bounce upward (ensure negative velocity)
         }
     }
 
     // Update ball bounds
-    let mut query = world.query::<(&Position, &mut Bounds, &Ball)>();
+    let mut query = world.query::<(&Position, &mut Bounds, &Size, &Ball)>();
     let updates: Vec<(f32, f32)> = query
         .iter(world)
-        .map(|(pos, _, _)| (pos.x, pos.y))
+        .map(|(pos, _, _, _)| (pos.x, pos.y))
         .collect();
 
-    let mut query = world.query::<(&Position, &mut Bounds, &Ball)>();
+    let mut query = world.query::<(&Position, &mut Bounds, &Size, &Ball)>();
     let mut iter = query.iter_mut(world);
     for (x, y) in updates {
-        if let Some((_, mut bounds, _)) = iter.next() {
+        if let Some((_, mut bounds, size, _)) = iter.next() {
             bounds.min_x = x;
-            bounds.max_x = x + BALL_SIZE;
+            bounds.max_x = x + size.width;
             bounds.min_y = y;
-            bounds.max_y = y + BALL_SIZE;
+            bounds.max_y = y + size.height;
         }
     }
 
     // Reset ball if out of bounds and return scoring event
-    let mut query = world.query::<(&mut Position, &mut Velocity, &Ball)>();
+    let mut query = world.query::<(&mut Position, &mut Velocity, &Size, &Ball)>();
     let mut iter = query.iter_mut(world);
-    if let Some((mut pos, mut vel, _)) = iter.next() {
+    if let Some((mut pos, mut vel, size, _)) = iter.next() {
         if pos.x < 0.0 {
             // Ball went past left side - AI scores
-            pos.x = (WINDOW_WIDTH as f32 - BALL_SIZE) / 2.0;
-            pos.y = (WINDOW_HEIGHT as f32 - BALL_SIZE) / 2.0;
+            pos.x = (screen_dimensions.0 - size.width) / 2.0;
+            pos.y = (screen_dimensions.1 - size.height) / 2.0;
             vel.x = BALL_SPEED;
             vel.y = BALL_SPEED;
             return ScoreEvent::AIScored;
-        } else if pos.x > WINDOW_WIDTH as f32 {
+        } else if pos.x > screen_dimensions.0 {
             // Ball went past right side - Player scores
-            pos.x = (WINDOW_WIDTH as f32 - BALL_SIZE) / 2.0;
-            pos.y = (WINDOW_HEIGHT as f32 - BALL_SIZE) / 2.0;
+            pos.x = (screen_dimensions.0 - size.width) / 2.0;
+            pos.y = (screen_dimensions.1 - size.height) / 2.0;
             vel.x = -BALL_SPEED;
             vel.y = -BALL_SPEED;
             return ScoreEvent::PlayerScored;
@@ -304,26 +342,27 @@ fn ball_paddle_collision_system(engine: &mut Engine) {
 }
 
 fn ai_paddle_system(engine: &mut Engine, delta_time: f32) {
+    let screen_dimensions = (engine.renderer().width(), engine.renderer().height());
     let world = engine.world_mut();
 
     // Get ball position
-    let mut ball_query = world.query::<(&Position, &Ball)>();
-    let ball_center = if let Some((pos, _)) = ball_query.iter(world).next() {
-        pos.y + BALL_SIZE / 2.0
+    let mut ball_query = world.query::<(&Position, &Size, &Ball)>();
+    let ball_center = if let Some((pos, size, _)) = ball_query.iter(world).next() {
+        pos.y + size.height / 2.0
     } else {
         return;
     };
 
     // Update AI paddle
-    let mut ai_query = world.query::<(&mut Position, &mut Bounds, &AIPaddle)>();
+    let mut ai_query = world.query::<(&mut Position, &mut Bounds, &Size, &AIPaddle)>();
     let ai_updates: Vec<f32> = ai_query
         .iter(world)
-        .map(|(pos, _, _)| {
-            let paddle_center = pos.y + PADDLE_HEIGHT / 2.0;
+        .map(|(pos, _, size, _)| {
+            let paddle_center = pos.y + size.height / 2.0;
 
             // Update the speed based on difficulty.
             // 0.7 is slightly slower than the player.
-            let ai_speed = PADDLE_SPEED * 0.7;
+            let ai_speed = PADDLE_SPEED * 2.0;
 
             let paddle_velocity = if paddle_center < ball_center - 10.0 {
                 ai_speed
@@ -336,26 +375,24 @@ fn ai_paddle_system(engine: &mut Engine, delta_time: f32) {
             // Simple position-based clamping like player paddle
             (pos.y + paddle_velocity * delta_time)
                 .max(0.0)
-                .min(WINDOW_HEIGHT as f32 - PADDLE_HEIGHT)
+                .min(screen_dimensions.1 - size.height)
         })
         .collect();
 
-    let mut ai_query = world.query::<(&mut Position, &mut Bounds, &AIPaddle)>();
+    let mut ai_query = world.query::<(&mut Position, &mut Bounds, &Size, &AIPaddle)>();
     let mut iter = ai_query.iter_mut(world);
     for new_y in ai_updates {
-        if let Some((mut pos, mut bounds, _)) = iter.next() {
+        if let Some((mut pos, mut bounds, size, _)) = iter.next() {
             pos.y = new_y;
             bounds.min_y = new_y;
-            bounds.max_y = new_y + PADDLE_HEIGHT;
+            bounds.max_y = new_y + size.height;
         }
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     App::run(
-        EngineConfig::new()
-            .with_title("Pong")
-            .with_size(WINDOW_WIDTH, WINDOW_HEIGHT),
+        EngineConfig::new().with_title("Pong").with_size(800, 600),
         Pong {
             player_score: 0,
             ai_score: 0,

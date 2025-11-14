@@ -82,6 +82,9 @@ impl<G: Game> ApplicationHandler for EngineApp<G> {
             WindowEvent::Resized(new_size) => {
                 if let Some(engine) = &mut self.engine {
                     engine.renderer_mut().resize(new_size);
+                    // I need to find a way to make this automatic.
+                    self.game
+                        .on_resize(engine, new_size.width as f32, new_size.height as f32);
                 }
             }
             WindowEvent::KeyboardInput {
@@ -121,7 +124,7 @@ impl<G: Game> ApplicationHandler for EngineApp<G> {
                     // Update time
                     engine.time_mut().update(delta_time);
 
-                    // Call user's update logic
+                    // Call user's update logic - MAKE THIS ECS BASED IN THE FUTURE
                     self.game.update(engine, delta_time);
 
                     // Run built-in rendering system to draw ECS entities
