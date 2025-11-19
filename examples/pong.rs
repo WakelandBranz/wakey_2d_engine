@@ -10,6 +10,7 @@ const PADDLE_HEIGHT: f32 = 120.0;
 const PADDLE_SPEED: f32 = 400.0; // pixels per second
 const BALL_SIZE: f32 = 10.0;
 const BALL_SPEED: f32 = 400.0; // pixels per second
+const ORIGINAL_HEIGHT: f32 = 600.0;
 
 // Score events
 #[derive(Debug, Clone, Copy)]
@@ -135,10 +136,7 @@ impl Game for Pong {
     fn on_resize(&mut self, engine: &mut Engine, width: f32, height: f32) {
         let world = engine.world_mut();
 
-        // Calculate scale factor based on height
-        // Assuming original design was for 600px height
-        let original_height = 600.0;
-        let scale_factor = height / original_height;
+        let scale_factor = height / ORIGINAL_HEIGHT;
 
         // Scale paddle dimensions
         let scaled_paddle_height = PADDLE_HEIGHT * scale_factor;
@@ -160,7 +158,7 @@ impl Game for Pong {
         // Update player paddle size (position stays at x=20)
         let mut player_query =
             world.query::<(&mut Position, &mut Bounds, &mut Size, &PlayerPaddle)>();
-        for (mut pos, mut bounds, mut size, _) in player_query.iter_mut(world) {
+        for (pos, mut bounds, mut size, _) in player_query.iter_mut(world) {
             size.width = scaled_paddle_width;
             size.height = scaled_paddle_height;
 
@@ -168,6 +166,17 @@ impl Game for Pong {
             bounds.max_x = pos.x + scaled_paddle_width;
             bounds.min_y = pos.y;
             bounds.max_y = pos.y + scaled_paddle_height;
+        }
+
+        // Update ball size and speed
+        let mut ball_query = world.query::<(&mut Velocity, &mut Size, &Ball)>();
+        for (mut vel, mut size, _) in ball_query.iter_mut(world) {
+            let scaled_ball_size = BALL_SIZE * scale_factor;
+            size.width = scaled_ball_size;
+            size.height = scaled_ball_size;
+            
+            vel.x = vel.x.signum() * BALL_SPEED * scale_factor;
+            vel.y = vel.y.signum() * BALL_SPEED * scale_factor;
         }
     }
 
@@ -277,15 +286,15 @@ fn ball_physics_system(engine: &mut Engine, delta_time: f32) -> ScoreEvent {
             // Ball went past left side - AI scores
             pos.x = (screen_dimensions.0 - size.width) / 2.0;
             pos.y = (screen_dimensions.1 - size.height) / 2.0;
-            vel.x = BALL_SPEED;
-            vel.y = BALL_SPEED;
+            vel.x = vel.x;
+            vel.y = vel.y;
             return ScoreEvent::AIScored;
         } else if pos.x > screen_dimensions.0 {
             // Ball went past right side - Player scores
             pos.x = (screen_dimensions.0 - size.width) / 2.0;
             pos.y = (screen_dimensions.1 - size.height) / 2.0;
-            vel.x = -BALL_SPEED;
-            vel.y = -BALL_SPEED;
+            vel.x = -vel.x;
+            vel.y = -vel.y;
             return ScoreEvent::PlayerScored;
         }
     }
@@ -362,7 +371,7 @@ fn ai_paddle_system(engine: &mut Engine, delta_time: f32) {
 
             // Update the speed based on difficulty.
             // 0.7 is slightly slower than the player.
-            let ai_speed = PADDLE_SPEED * 2.0;
+            let ai_speed = PADDLE_SPEED * 0.7;
 
             let paddle_velocity = if paddle_center < ball_center - 10.0 {
                 ai_speed
