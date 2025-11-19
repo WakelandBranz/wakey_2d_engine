@@ -5,6 +5,7 @@ use wakey_2d_engine::{
 };
 use winit::keyboard::KeyCode;
 
+// Crappy defaults. I want to make this easier for users to define in other ways.
 const PADDLE_WIDTH: f32 = 20.0;
 const PADDLE_HEIGHT: f32 = 120.0;
 const PADDLE_SPEED: f32 = 400.0; // pixels per second

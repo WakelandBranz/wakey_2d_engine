@@ -32,7 +32,6 @@ impl<G: Game> EngineApp<G> {
     }
 }
 
-// Generic winit stuff. All of this is required for winit.
 impl<G: Game> ApplicationHandler for EngineApp<G> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         if self.window.is_none() {

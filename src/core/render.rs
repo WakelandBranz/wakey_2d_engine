@@ -1,6 +1,6 @@
 //! This file does not have much use for now.
 
-/// Common colors for rendering
+/// Common RGBA colors for rendering
 pub mod colors {
     pub const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
     pub const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
