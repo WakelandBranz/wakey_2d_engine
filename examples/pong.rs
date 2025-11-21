@@ -9,6 +9,7 @@ use winit::keyboard::KeyCode;
 const PADDLE_WIDTH: f32 = 20.0;
 const PADDLE_HEIGHT: f32 = 120.0;
 const PADDLE_SPEED: f32 = 400.0; // pixels per second
+const AI_SPEED_OFFSET: f32 = 0.7;
 const BALL_SIZE: f32 = 10.0;
 const BALL_SPEED: f32 = 400.0; // pixels per second
 const ORIGINAL_HEIGHT: f32 = 600.0;
@@ -63,7 +64,7 @@ impl Game for Pong {
             ),
             Size::new(PADDLE_WIDTH, PADDLE_HEIGHT),
             Renderable::red(),
-            Velocity::new(0.0, 0.0),
+            Velocity::new(PADDLE_SPEED * AI_SPEED_OFFSET, PADDLE_SPEED * AI_SPEED_OFFSET),
             Bounds::from_position_and_size(
                 Position::new(
                     screen_dimensions.0 as f32 - PADDLE_WIDTH - 20.0,
@@ -144,8 +145,8 @@ impl Game for Pong {
         let scaled_paddle_width = PADDLE_WIDTH * scale_factor;
 
         // Update AI paddle position and size
-        let mut ai_query = world.query::<(&mut Position, &mut Bounds, &mut Size, &AIPaddle)>();
-        for (mut pos, mut bounds, mut size, _) in ai_query.iter_mut(world) {
+        let mut ai_query = world.query::<(&mut Velocity, &mut Position, &mut Bounds, &mut Size, &AIPaddle)>();
+        for (mut vel, mut pos, mut bounds, mut size, _) in ai_query.iter_mut(world) {
             pos.x = width - scaled_paddle_width - 20.0;
             size.width = scaled_paddle_width;
             size.height = scaled_paddle_height;
@@ -154,12 +155,14 @@ impl Game for Pong {
             bounds.max_x = pos.x + scaled_paddle_width;
             bounds.min_y = pos.y;
             bounds.max_y = pos.y + scaled_paddle_height;
+
+            vel.y = vel.y.signum() * PADDLE_SPEED * AI_SPEED_OFFSET * scale_factor;
         }
 
         // Update player paddle size (position stays at x=20)
         let mut player_query =
-            world.query::<(&mut Position, &mut Bounds, &mut Size, &PlayerPaddle)>();
-        for (pos, mut bounds, mut size, _) in player_query.iter_mut(world) {
+            world.query::<(&mut Velocity, &mut Position, &mut Bounds, &mut Size, &PlayerPaddle)>();
+        for (mut vel, pos, mut bounds, mut size, _) in player_query.iter_mut(world) {
             size.width = scaled_paddle_width;
             size.height = scaled_paddle_height;
 
@@ -167,6 +170,8 @@ impl Game for Pong {
             bounds.max_x = pos.x + scaled_paddle_width;
             bounds.min_y = pos.y;
             bounds.max_y = pos.y + scaled_paddle_height;
+
+            vel.y = vel.y.signum() * PADDLE_SPEED * scale_factor;
         }
 
         // Update ball size and speed
@@ -192,17 +197,17 @@ fn player_paddle_system(engine: &mut Engine, delta_time: f32) {
     let input = engine.input().clone();
     let screen_dimensions = (engine.renderer().width(), engine.renderer().height());
     let world = engine.world_mut();
-    let mut query = world.query::<(&mut Position, &mut Bounds, &Size, &PlayerPaddle)>();
+    let mut query = world.query::<(&mut Velocity, &mut Position, &mut Bounds, &Size, &PlayerPaddle)>();
 
     // Collect movement updates first
     let updates: Vec<f32> = query
         .iter(world)
-        .map(|(pos, _, size, _)| {
+        .map(|(vel, pos, _, size, _)| {
             let paddle_velocity =
                 if input.is_pressed(KeyCode::ArrowUp) || input.is_pressed(KeyCode::KeyW) {
-                    -PADDLE_SPEED
+                    vel.y * -1.0
                 } else if input.is_pressed(KeyCode::ArrowDown) || input.is_pressed(KeyCode::KeyS) {
-                    PADDLE_SPEED
+                    vel.y
                 } else {
                     0.0
                 };
@@ -364,20 +369,16 @@ fn ai_paddle_system(engine: &mut Engine, delta_time: f32) {
     };
 
     // Update AI paddle
-    let mut ai_query = world.query::<(&mut Position, &mut Bounds, &Size, &AIPaddle)>();
+    let mut ai_query = world.query::<(&mut Velocity, &mut Position, &mut Bounds, &Size, &AIPaddle)>();
     let ai_updates: Vec<f32> = ai_query
         .iter(world)
-        .map(|(pos, _, size, _)| {
+        .map(|(vel, pos, _, size, _)| {
             let paddle_center = pos.y + size.height / 2.0;
 
-            // Update the speed based on difficulty.
-            // 0.7 is slightly slower than the player.
-            let ai_speed = PADDLE_SPEED * 0.7;
-
             let paddle_velocity = if paddle_center < ball_center - 10.0 {
-                ai_speed
+                vel.y
             } else if paddle_center > ball_center + 10.0 {
-                -ai_speed
+                vel.y * -1.0
             } else {
                 0.0
             };
