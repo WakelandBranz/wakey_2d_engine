@@ -11,7 +11,6 @@ The engine currently supports:
 - Text rendering
 - Colored quad rendering
 - Playable Pong demo
-- Web deployment via WASM
 
 ## Development Roadmap
 
@@ -63,6 +62,7 @@ Goal: Screen-space effects that demonstrate understanding of the full rendering 
 
 - Profiler/debug overlay showing frame times, draw calls, GPU memory
 - Potential 3D renderer exploration (deferred shading, PBR)
+- Web deployment via WASM <- This is crucial!
 
 ## Technical Writeups
 
