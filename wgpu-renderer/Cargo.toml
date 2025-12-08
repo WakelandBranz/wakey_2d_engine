@@ -1,0 +1,25 @@
+[package]
+name = "wgpu-renderer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+winit = "0.30.12"
+wgpu = "26.0.1"
+wgpu_glyph = { version = "0.26", git = "https://github.com/hecrj/wgpu_glyph.git" }
+thiserror = "2.0.17"
+image = "0.25"
+glam = { version = "0.30.9", features = ["mint"] }
+bytemuck = { version = "1.24.0", features = ["derive"] }
+pollster = "0.4"
+env_logger = "0.11.8"
+log = "0.4.28"
+
+[build-dependencies]
+naga = { version = "0.20", features = ["glsl-in", "wgsl-out"] }
+anyhow = "1.0"
+glob = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
