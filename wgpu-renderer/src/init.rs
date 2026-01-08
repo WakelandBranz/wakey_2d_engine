@@ -1,11 +1,12 @@
-//! Contains all initialization code. Makes renderer::new() much simpler to read.
+// Contains all initialization code. Makes renderer::new() much simpler to read.
 
+use glyphon::ColorMode;
 use std::sync::Arc;
-
 #[cfg(not(target_arch = "wasm32"))]
 use wgpu::Backends;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    Adapter, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
+    Adapter, BindGroup,BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BlendComponent, BlendState,
     Buffer, BufferBindingType, BufferDescriptor, BufferUsages, ColorTargetState, ColorWrites,
     Device, DeviceDescriptor, Features, FragmentState, FrontFace, Instance, InstanceDescriptor,
@@ -13,37 +14,38 @@ use wgpu::{
     PrimitiveState, PrimitiveTopology, Queue, RenderPipeline, RenderPipelineDescriptor,
     RequestAdapterOptions, ShaderModule, ShaderModuleDescriptor, ShaderSource, ShaderStages,
     Surface, SurfaceConfiguration, TextureFormat, TextureUsages, VertexBufferLayout, VertexState,
-    util::{BufferInitDescriptor, DeviceExt},
 };
-use wgpu_glyph::ab_glyph;
 use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::RenderError;
+use crate::text::renderer::TextRenderer;
 use crate::types::{U32_SIZE, Vertex};
 
-const FONT_BYTES: &[u8] = include_bytes!("../res/fonts/PressStart2P-Regular.ttf");
-
-pub(crate) fn create_instance() -> Instance {
+pub(crate) fn create_instance() ->Instance {
     Instance::new(
         &(InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
-            backends: Backends::GL,
+            backends: Backends::BROWSER_WEBGPU | Backends::GL,
             ..Default::default()
         }),
     )
 }
 
-pub(crate) fn create_surface(instance: &Instance, window: Arc<Window>) -> Surface<'static> {
-    instance.create_surface(window).unwrap()
+pub(crate) fn create_surface(
+    instance: &Instance,
+    window: Arc<Window>,
+) -> Result<Surface<'static>, RenderError> {
+    Ok(instance.create_surface(window)?)
 }
 
 pub(crate) async fn create_adapter(
     instance: &Instance,
     power_preference: PowerPreference,
     surface: &Surface<'_>,
-) -> Adapter {
-    instance
+) -> Result<Adapter, RenderError> {
+    Ok(instance
         .request_adapter(
             &(RequestAdapterOptions {
                 power_preference,
@@ -51,12 +53,13 @@ pub(crate) async fn create_adapter(
                 force_fallback_adapter: false,
             }),
         )
-        .await
-        .unwrap()
+        .await?)
 }
 
-pub(crate) async fn create_device_and_queue(adapter: &Adapter) -> (Device, Queue) {
-    adapter
+pub(crate) async fn create_device_and_queue(
+    adapter: &Adapter,
+) -> Result<(Device, Queue), RenderError> {
+    Ok(adapter
         .request_device(
             &(DeviceDescriptor {
                 label: None,
@@ -65,33 +68,35 @@ pub(crate) async fn create_device_and_queue(adapter: &Adapter) -> (Device, Queue
                 ..Default::default()
             }),
         )
-        .await
-        .unwrap()
+        .await?)
 }
 
 pub(crate) fn create_surface_config(
     surface: &Surface<'_>,
     adapter: &Adapter,
     size: PhysicalSize<u32>,
-) -> SurfaceConfiguration {
+) -> Result<SurfaceConfiguration, RenderError> {
     let surface_caps = surface.get_capabilities(adapter);
     let surface_format = surface_caps
         .formats
         .iter()
         .copied()
         .find(|f| f.is_srgb())
-        .unwrap_or(surface_caps.formats[0]);
+        .or_else(|| surface_caps.formats.first().copied())
+        .ok_or(RenderError::NoSurfaceFormat)?;
 
-    SurfaceConfiguration {
+    tracing::debug!("Surface Configuration Present Modes: {:?}", surface_caps);
+    
+    Ok(SurfaceConfiguration {
         usage: TextureUsages::RENDER_ATTACHMENT,
         format: surface_format,
         width: size.width,
         height: size.height,
-        present_mode: surface_caps.present_modes[0],
+        present_mode: surface_caps.present_modes[1],
         alpha_mode: surface_caps.alpha_modes[0],
         view_formats: vec![],
         desired_maximum_frame_latency: 2,
-    }
+    })
 }
 
 pub(crate) fn create_bind_group_layout(device: &Device) -> BindGroupLayout {
@@ -118,9 +123,9 @@ pub(crate) fn create_pipeline_layout(
 ) -> PipelineLayout {
     device.create_pipeline_layout(
         &(PipelineLayoutDescriptor {
-            bind_group_layouts: &[bind_group_layout],
-            push_constant_ranges: &[],
             label: Some("Pipeline Layout"),
+            bind_group_layouts: &[bind_group_layout],
+            immediate_size: 0,
         }),
     )
 }
@@ -238,16 +243,22 @@ pub(crate) fn create_render_pipeline(
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview: None,
             cache: None,
+            multiview_mask: None,
         }),
     )
 }
 
-pub(crate) fn create_glyph_brush(
-    device: &Device,
-    surface_format: TextureFormat,
-) -> wgpu_glyph::GlyphBrush<()> {
-    let font = ab_glyph::FontArc::try_from_slice(FONT_BYTES).unwrap();
-    wgpu_glyph::GlyphBrushBuilder::using_font(font).build(device, surface_format)
+pub(crate) fn create_text_renderer(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    swapchain_format: TextureFormat,
+) -> Result<TextRenderer, RenderError> {
+    let color_mode = if swapchain_format.is_srgb() {
+        ColorMode::Web
+    } else {
+        ColorMode::Accurate
+    };
+
+    TextRenderer::new(device, queue, swapchain_format, color_mode)
 }

@@ -1,10 +1,12 @@
 pub mod app;
-pub mod context;
 pub mod game;
 
-pub use context::Engine;
+use bevy_ecs::{resource::Resource, world::World};
 pub use game::Game;
-use winit::event_loop::EventLoop;
+use wgpu_renderer::Renderer;
+use winit::{event_loop::EventLoop, keyboard::KeyCode};
+
+use crate::core::{input::Input, time::Time};
 
 // Builder-style configuration struct
 pub struct EngineConfig {
@@ -54,5 +56,52 @@ impl App {
         let mut app = app::EngineApp::new(config, game);
         event_loop.run_app(&mut app)?;
         Ok(())
+    }
+}
+
+// Public facing engine
+pub struct Engine {
+    pub(crate) renderer: Renderer,
+    pub(crate) world: World,
+    pub(crate) input: Input<KeyCode>,
+    pub(crate) time: Time,
+}
+
+impl Engine {
+    // TODO: Make Result return type
+    pub(crate) fn init(&mut self, renderer: Renderer, input: Input<KeyCode>, time: Time) {
+        self.world.insert_resource(Renderer::new);
+    }
+    
+    pub fn renderer_mut(&mut self) -> &mut Renderer {
+        &mut self.renderer
+    }
+
+    pub fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+
+    pub fn world_mut(&mut self) -> &mut World {
+        &mut self.world
+    }
+
+    pub fn world(&self) -> &World {
+        &self.world
+    }
+
+    pub fn input(&self) -> &Input<KeyCode> {
+        &self.input
+    }
+
+    pub fn input_mut(&mut self) -> &mut Input<KeyCode> {
+        &mut self.input
+    }
+
+    pub fn time(&self) -> Time {
+        self.time
+    }
+
+    pub fn time_mut(&mut self) -> &mut Time {
+        &mut self.time
     }
 }

@@ -7,7 +7,7 @@ use winit::{
     window::{Window, WindowAttributes},
 };
 
-use crate::engine::{EngineConfig, context::Engine, game::Game};
+use crate::engine::{EngineConfig, Engine, game::Game};
 
 // Internal application handler
 pub struct EngineApp<G: Game> {
@@ -49,7 +49,8 @@ impl<G: Game> ApplicationHandler for EngineApp<G> {
             );
 
             let size = window.inner_size();
-            let renderer = pollster::block_on(wgpu_renderer::Renderer::new(window.clone(), size));
+            // TODO: Need to error handle this.
+            let mut renderer = pollster::block_on(wgpu_renderer::Renderer::new(window.clone(), size)).unwrap();
 
             window.request_redraw();
             self.window = Some(window);

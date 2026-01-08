@@ -2,7 +2,7 @@
 
 use bevy_ecs::component::Component;
 
-use crate::core::render::colors::{BLACK, BLUE, GREEN, RED, WHITE};
+use crate::core::colors::colors::{BLACK, BLUE, GREEN, RED, WHITE};
 
 /// A 2D position component
 #[derive(Component, Clone, Copy, Debug, PartialEq)]

@@ -1,6 +1,6 @@
 use winit::event::WindowEvent;
 
-use crate::engine::context::Engine;
+use crate::engine::Engine;
 
 pub trait Game: Send + 'static {
     fn init(&mut self, engine: &mut Engine);

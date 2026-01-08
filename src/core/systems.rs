@@ -4,8 +4,8 @@
 //! to perform operations like rendering or physics updates.
 
 use crate::{
-    core::world::{Position, Renderable, Size},
-    engine::context::Engine,
+    core::components::{Position, Renderable, Size},
+    engine::Engine,
 };
 
 /// Render system that queries all entities with (Position, Size, Renderable) components

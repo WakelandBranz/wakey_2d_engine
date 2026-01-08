@@ -1,9 +1,11 @@
 use bevy_ecs::component::Component;
 use wakey_2d_engine::{
-    core::world::{Bounds, Position, Renderable, Size, Velocity},
+    core::components::{Bounds, Position, Renderable, Size, Velocity},
     prelude::*,
 };
 use winit::keyboard::KeyCode;
+
+const FONT_BYTES: &[u8] = include_bytes!("../res/fonts/PressStart2P-Regular.ttf");
 
 // Crappy defaults. I want to make this easier for users to define in other ways.
 const PADDLE_WIDTH: f32 = 20.0;
@@ -41,6 +43,13 @@ impl Game for Pong {
     fn init(&mut self, engine: &mut Engine) {
         let screen_dimensions = (engine.renderer().width(), engine.renderer().height());
         let world = engine.world_mut();
+        
+        let fps_text = engine.renderer_mut().create_cached_text(, );
+        
+        world.insert_resource(value);
+        
+        //let video_game_awesome_font_handle = renderer.load_ttf_font_from_bytes(FONT_BYTES.into()).unwrap();
+        //renderer.set_default_font(video_game_awesome_font_handle);
 
         // Create player paddle (left side)
         world.spawn((

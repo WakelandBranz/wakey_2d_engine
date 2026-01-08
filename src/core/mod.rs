@@ -1,5 +1,5 @@
 pub mod input;
-pub mod render;
+pub mod colors;
 pub mod systems;
 pub mod time;
-pub mod world;
+pub mod components;
