@@ -292,8 +292,6 @@ fn ball_physics_system(engine: &mut Engine, delta_time: f32) -> ScoreEvent {
             // Ball went past left side - AI scores
             pos.x = (screen_dimensions.0 - size.width) / 2.0;
             pos.y = (screen_dimensions.1 - size.height) / 2.0;
-            vel.x = vel.x;
-            vel.y = vel.y;
             return ScoreEvent::AIScored;
         } else if pos.x > screen_dimensions.0 {
             // Ball went past right side - Player scores
